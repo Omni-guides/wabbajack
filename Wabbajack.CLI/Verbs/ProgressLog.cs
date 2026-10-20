@@ -11,20 +11,23 @@ namespace Wabbajack.CLI.Verbs;
 
 /// <summary>
 ///     Logs what the app shows while an install runs: the installer's status and percent, how far a running
-///     preflight check is, and download and hashing speed. Each is logged at most once a second.
+///     preflight check is, and download and hashing speed. Each is logged at most once a second. With
+///     <c>showProgress</c> each running download is logged as well, every five seconds.
 /// </summary>
 public class ProgressLog
 {
     private readonly ILogger _logger;
     private readonly IResource[] _resources;
+    private readonly bool _showProgress;
     private readonly Dictionary<string, long> _next = new();
     private readonly Dictionary<string, (long Bytes, long At)> _sampled = new();
     private readonly Dictionary<string, (long Size, long Done)> _archives = new();
 
-    public ProgressLog(ILogger logger, IEnumerable<IResource> resources)
+    public ProgressLog(ILogger logger, IEnumerable<IResource> resources, bool showProgress = false)
     {
         _logger = logger;
         _resources = resources.ToArray();
+        _showProgress = showProgress;
     }
 
     public void Install(StatusUpdate update)
@@ -44,6 +47,11 @@ public class ProgressLog
         lock (_archives)
             _archives[status.Archive.Name] = (status.Archive.Size,
                 status.State == ArchiveState.Downloaded ? status.Archive.Size : status.Progress ?? 0);
+
+        if (_showProgress && status is {State: ArchiveState.Downloading, Progress: > 0 and var bytes} &&
+            Due(status.Archive.Name, 5000))
+            _logger.LogInformation("[{State}] {Archive}: {Done} of {Size}", status.State, status.Archive.Name,
+                bytes.ToFileSizeString(), status.Archive.Size.ToFileSizeString());
     }
 
     public void Check(CheckStatus check)
@@ -74,14 +82,14 @@ public class ProgressLog
             string.Join(", ", parts));
     }
 
-    private bool Due(string key)
+    private bool Due(string key, int interval = 1000)
     {
         lock (_next)
         {
             var now = Environment.TickCount64;
             if (now < _next.GetValueOrDefault(key))
                 return false;
-            _next[key] = now + 1000;
+            _next[key] = now + interval;
             return true;
         }
     }

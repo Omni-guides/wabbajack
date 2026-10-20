@@ -78,6 +78,30 @@ public class ProgressLogTests
         Assert.Equal(new[] {"Check: 3 of 4 finished (50%, 2MB of 4MB)"}, _logger.Lines);
     }
 
+    [Fact]
+    public void ShowProgressLogsEachRunningDownloadOnce()
+    {
+        var log = new ProgressLog(_logger, Array.Empty<IResource>(), true);
+        var archive = new Archive {Name = "a.7z", Size = 4 << 20};
+
+        log.Archive(new ArchiveStatus(archive, ArchiveState.Downloading, null, 0, null));
+        log.Archive(new ArchiveStatus(archive, ArchiveState.Downloading, null, 1 << 20, null));
+        log.Archive(new ArchiveStatus(archive, ArchiveState.Downloading, null, 2 << 20, null));
+
+        Assert.Equal(new[] {"[Downloading] a.7z: 1MB of 4MB"}, _logger.Lines);
+    }
+
+    [Fact]
+    public void DownloadsAreNotLoggedWithoutShowProgress()
+    {
+        var log = new ProgressLog(_logger, Array.Empty<IResource>());
+        var archive = new Archive {Name = "a.7z", Size = 4 << 20};
+
+        log.Archive(new ArchiveStatus(archive, ArchiveState.Downloading, null, 1 << 20, null));
+
+        Assert.Empty(_logger.Lines);
+    }
+
     private class ListLogger : ILogger
     {
         public List<string> Lines { get; } = new();
