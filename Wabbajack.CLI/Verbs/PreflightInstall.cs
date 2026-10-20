@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Wabbajack.Common;
 using Wabbajack.DTOs;
 using Wabbajack.DTOs.DownloadStates;
 using Wabbajack.Installer;
 using Wabbajack.Installer.Preflight;
+using Wabbajack.RateLimiter;
 
 namespace Wabbajack.CLI.Verbs;
 
@@ -33,19 +35,31 @@ public static class PreflightInstall
         IReadOnlyList<ManualQueueItem> manual =
             Array.Empty<ManualQueueItem>();
         var lastLogged = new Dictionary<string, (PreflightState State, string Message)>();
+        var progress = new ProgressLog(logger, provider.GetServices<IResource>());
 
         runner.Changed += evt =>
         {
+            if (evt is ArchiveChanged {Status: var seen})
+                progress.Archive(seen);
+
             switch (evt)
             {
                 case CheckChanged {Status: var check}:
-                    // Progress ticks arrive as CheckChanged too; only a new state or message is worth a line.
+                    // Progress ticks arrive as CheckChanged too; a new state or message is worth a line, a tick
+                    // goes to the progress log.
+                    bool tick;
                     lock (lastLogged)
                     {
-                        if (lastLogged.TryGetValue(check.Id, out var last) &&
-                            last.State == check.State && last.Message == check.Message)
-                            return;
-                        lastLogged[check.Id] = (check.State, check.Message);
+                        tick = lastLogged.TryGetValue(check.Id, out var last) &&
+                               last.State == check.State && last.Message == check.Message;
+                        if (!tick)
+                            lastLogged[check.Id] = (check.State, check.Message);
+                    }
+
+                    if (tick)
+                    {
+                        progress.Check(check);
+                        return;
                     }
 
                     logger.LogInformation("[{State}] {Title}: {Message}", check.State, check.Title, check.Message);
@@ -64,7 +78,9 @@ public static class PreflightInstall
         var outcome = await runner.RunAll(token);
         if (outcome.Ready)
         {
-            var result = await StandardInstaller.Create(provider, configuration).Begin(token);
+            var installer = StandardInstaller.Create(provider, configuration);
+            installer.OnStatusUpdate = progress.Install;
+            var result = await installer.Begin(token);
             return result == InstallResult.Succeeded ? Succeeded : InstallFailed;
         }
 
