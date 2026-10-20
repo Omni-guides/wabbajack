@@ -44,10 +44,11 @@ public class Install
         new OptionDefinition(typeof(AbsolutePath), "w", "wabbajack", "Wabbajack file"),
         new OptionDefinition(typeof(string), "m", "machineUrl", "Machine url to download"),
         new OptionDefinition(typeof(AbsolutePath), "o", "output", "Output path"),
-        new OptionDefinition(typeof(AbsolutePath), "d", "downloads", "Downloads path")
+        new OptionDefinition(typeof(AbsolutePath), "d", "downloads", "Downloads path"),
+        new OptionDefinition(typeof(bool), "s", "show-progress", "Log the progress of each download")
     });
 
-    internal async Task<int> Run(AbsolutePath wabbajack, AbsolutePath output, AbsolutePath downloads, string machineUrl, CancellationToken token)
+    internal async Task<int> Run(AbsolutePath wabbajack, AbsolutePath output, AbsolutePath downloads, string machineUrl, CancellationToken token, bool showProgress = false)
     {
         if (!string.IsNullOrEmpty(machineUrl))
         {
@@ -83,7 +84,7 @@ public class Install
             OtherGames = modlist.OtherGames,
             ModlistArchive = wabbajack,
             GameFolder = default
-        }, _logger, token);
+        }, _logger, token, showProgress);
     }
 
     private async Task<bool> DownloadMachineUrl(string machineUrl, AbsolutePath wabbajack, CancellationToken token)

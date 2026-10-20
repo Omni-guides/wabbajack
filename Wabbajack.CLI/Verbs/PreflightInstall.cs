@@ -27,7 +27,7 @@ public static class PreflightInstall
     public const int PreflightFailed = 3;
 
     public static async Task<int> Run(IServiceProvider provider, InstallerConfiguration configuration,
-        ILogger logger, CancellationToken token)
+        ILogger logger, CancellationToken token, bool showProgress = false)
     {
         var runner = PreflightRunner.Create(provider, configuration,
             new PreflightOptions {WaitForManualDownloads = false});
@@ -35,7 +35,7 @@ public static class PreflightInstall
         IReadOnlyList<ManualQueueItem> manual =
             Array.Empty<ManualQueueItem>();
         var lastLogged = new Dictionary<string, (PreflightState State, string Message)>();
-        var progress = new ProgressLog(logger, provider.GetServices<IResource>());
+        var progress = new ProgressLog(logger, provider.GetServices<IResource>(), showProgress);
 
         runner.Changed += evt =>
         {
